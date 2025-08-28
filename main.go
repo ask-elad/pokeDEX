@@ -8,12 +8,17 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
+
+	"github.com/ask-elad/pokedex/internal/utils"
+	// adjust import path
 )
 
-// Config holds pagination state
+// Config holds pagination state + cache
 type Config struct {
 	NextURL string
 	PrevURL string
+	Cache   *utils.Cache
 }
 
 type cliCommand struct {
@@ -67,6 +72,12 @@ func commandMap(cfg *Config) error {
 		url = "https://pokeapi.co/api/v2/location-area/"
 	}
 
+	// 🔹 Check cache first
+	if cached, ok := cfg.Cache.Get(url); ok {
+		return printLocations(cfg, cached)
+	}
+
+	// 🔹 Otherwise make request
 	res, err := http.Get(url)
 	if err != nil {
 		return err
@@ -78,30 +89,10 @@ func commandMap(cfg *Config) error {
 		return err
 	}
 
-	var data struct {
-		Count    int    `json:"count"`
-		Next     string `json:"next"`
-		Previous string `json:"previous"`
-		Results  []struct {
-			Name string `json:"name"`
-			URL  string `json:"url"`
-		} `json:"results"`
-	}
+	// Save to cache
+	cfg.Cache.Add(url, body)
 
-	err = json.Unmarshal(body, &data)
-	if err != nil {
-		return err
-	}
-
-	// update config with new pagination links
-	cfg.NextURL = data.Next
-	cfg.PrevURL = data.Previous
-
-	for _, loc := range data.Results {
-		fmt.Println(loc.Name)
-	}
-
-	return nil
+	return printLocations(cfg, body)
 }
 
 func commandMapBack(cfg *Config) error {
@@ -116,17 +107,45 @@ func commandMapBack(cfg *Config) error {
 	return commandMap(cfg)
 }
 
-func main() {
-	cfg := &Config{}
-	reader := bufio.NewScanner(os.Stdin)
+// 🔹 helper to decode and print locations
+func printLocations(cfg *Config, body []byte) error {
+	var data struct {
+		Count    int    `json:"count"`
+		Next     string `json:"next"`
+		Previous string `json:"previous"`
+		Results  []struct {
+			Name string `json:"name"`
+			URL  string `json:"url"`
+		} `json:"results"`
+	}
 
+	err := json.Unmarshal(body, &data)
+	if err != nil {
+		return err
+	}
+
+	// update config with new pagination links
+	cfg.NextURL = data.Next
+	cfg.PrevURL = data.Previous
+
+	for _, loc := range data.Results {
+		fmt.Println(loc.Name)
+	}
+	return nil
+}
+
+func main() {
+	cfg := &Config{
+		Cache: utils.NewCache(5 * time.Minute), // cache entries live for 5m
+	}
+
+	reader := bufio.NewScanner(os.Stdin)
 	for {
 		fmt.Print("Pokedex > ")
 		if !reader.Scan() {
 			break
 		}
 		words := cleanInput(reader.Text())
-
 		if len(words) == 0 {
 			continue
 		}
