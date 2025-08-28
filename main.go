@@ -145,7 +145,7 @@ func main() {
 		if !reader.Scan() {
 			break
 		}
-		words := cleanInput(reader.Text())
+		words := CleanInput(reader.Text())
 		if len(words) == 0 {
 			continue
 		}
@@ -162,7 +162,7 @@ func main() {
 	}
 }
 
-func cleanInput(text string) []string {
+func CleanInput(text string) []string {
 	cleaned := strings.TrimSpace(strings.ToLower(text))
 	return strings.Fields(cleaned)
 }
