@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/ask-elad/pokedex/internal/utils"
-	// adjust import path
 )
 
 // Config holds pagination state + cache
@@ -48,6 +47,11 @@ var commands = map[string]cliCommand{
 		description: "Displays the previous 20 location names",
 		callback:    commandMapBack,
 	},
+	"explore": {
+		name:        "explore",
+		description: "Explore the particular map location",
+		callback:    nil, // handled specially in main()
+	},
 }
 
 func commandExit(cfg *Config) error {
@@ -56,13 +60,58 @@ func commandExit(cfg *Config) error {
 	return nil
 }
 
+// explore with area argument
+func commandExplore(cfg *Config, locationArea string) error {
+	// 🔹 Check cache
+	if cached, ok := cfg.Cache.Get(locationArea); ok {
+		return printExplore(cached)
+	}
+
+	// 🔹 Fetch from API
+	url := "https://pokeapi.co/api/v2/location-area/" + locationArea
+	res, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return err
+	}
+
+	cfg.Cache.Add(locationArea, body)
+	return printExplore(body)
+}
+
+// helper for explore
+func printExplore(body []byte) error {
+	var data struct {
+		PokemonEncounters []struct {
+			Pokemon struct {
+				Name string `json:"name"`
+			} `json:"pokemon"`
+		} `json:"pokemon_encounters"`
+	}
+
+	if err := json.Unmarshal(body, &data); err != nil {
+		return err
+	}
+
+	for _, p := range data.PokemonEncounters {
+		fmt.Println(p.Pokemon.Name)
+	}
+	return nil
+}
+
 func commandHelp(cfg *Config) error {
 	fmt.Println(`Welcome to the Pokedex!
 Usage:
-  help   - Displays this help message
-  exit   - Exit the Pokedex
-  map    - Shows the next 20 locations
-  mapb   - Shows the previous 20 locations`)
+  help             - Displays this help message
+  exit             - Exit the Pokedex
+  map              - Shows the next 20 locations
+  mapb             - Shows the previous 20 locations
+  explore <area>   - Explore Pokémon in a location area`)
 	return nil
 }
 
@@ -156,6 +205,18 @@ func main() {
 			continue
 		}
 
+		// 🔹 handle explore specially
+		if words[0] == "explore" {
+			if len(words) < 2 {
+				fmt.Println("Usage: explore <location-area>")
+				continue
+			}
+			if err := commandExplore(cfg, words[1]); err != nil {
+				fmt.Println("Error:", err)
+			}
+			continue
+		}
+
 		if err := cmd.callback(cfg); err != nil {
 			fmt.Println("Error:", err)
 		}
@@ -166,4 +227,3 @@ func CleanInput(text string) []string {
 	cleaned := strings.TrimSpace(strings.ToLower(text))
 	return strings.Fields(cleaned)
 }
-
