@@ -201,7 +201,7 @@ func locationHasPokemon(body []byte, pokemonLower string) (bool, error) {
 
 func commandInspect(cfg *Config, pokemon string) error {
 	if cfg == nil || cfg.Pokedex == nil {
-		fmt.Println("you have not caught that pokemon")
+		fmt.Println("you have not caught that pokemon yet")
 		return nil
 	}
 	name := strings.ToLower(pokemon)
@@ -430,4 +430,3 @@ func CleanInput(text string) []string {
 	cleaned := strings.TrimSpace(strings.ToLower(text))
 	return strings.Fields(cleaned)
 }
-
